@@ -1,162 +1,146 @@
-require('dotenv').config()
-//Liri takes the following arguments
-// * my-tweets
-// * spotify-this-song
-// * movie-this
-// * do-what-it-says
+// import the dotENV which pulls the info from .env into the keys file
+require("dotenv").config();
 
-//these add other programs to this one
-var dataKeys = require("./keys.js");
-var Spotify = require('node-spotify-api');
+// variable of keys that imports info with the keys.js file via the dotENV.
+var keys = require("./keys.js");
+// bringing in the other items for npm install for reference later
 var request = require('request');
-var fs = require('fs'); 
 var Twitter = require('twitter');
-var client= new Twitter(dataKeys.twitter);
+var Spotify = require('node-spotify-api');
+var fs = require("fs");
 
+// // API Key information
+var spotify = new Spotify(keys.spotify);
+var client = new Twitter(keys.twitter);
 
-var writeToLog = function(data) {
-  fs.appendFile("log.txt", '\r\n\r\n');
+// capture the user command
+var uProcess = process.argv[2];
+// storing this as a variable
+var arg3 = process.argv[3];
 
-  fs.appendFile("log.txt", JSON.stringify(data), function(err) {
-    if (err) {
-      return console.log(err);
-    }
-
-    console.log("log.txt was updated!");
-  });
+// capture the input
+var input = "";
+// capture the input dynamically based on how many separate words the user puts in via for loop
+for (var i = 3; i < process.argv.length; i++) {
+	input += process.argv[i] + "+";
 }
 
-//Creates a function for finding artist name from spotify
-var getArtistNames = function(artist) {
-  return artist.name;
+// placeholder variable to make it easier for the console.log if movie-this isn't followed with input
+var nobodyText =
+	"\n If you haven't watched 'Mr. Nobody,' then you should: http://www.imdb.com/title/tt0485947\nIt's on Netflix!";
+
+// function for doing the omdb call via request npm 
+function omdbCall(object) {
+	// request url is omdpapi w/ api key, passed object and then a callback function
+	request("http://www.omdbapi.com/?apikey=75c70b0&t=" + object, function (error, response, body) {
+		// erroer handling
+		if (!error && response.statusCode == 200) {
+			// easy variables
+			var body = JSON.parse(body);
+			var movieInfo = {
+				"Title": body.Title,
+				"Release Year": body.Year,
+				"IMDB Rating": parseInt(body.imdbRating),
+				"Rotten Tomatoes Rating": body.Ratings[1].Value,
+				"Country of Production": body.Country,
+				"Language(s)": body.Language,
+				"Plot": body.Plot,
+				"Actors ": body.Actors
+			}
+			// print the JSON object out
+			return console.log(JSON.stringify(movieInfo, null, 2));
+		}
+		// error handling
+		console.log(error);
+	})
+}
+// API call via twitter npm to ask for 20 tweets at my handle with a callback function 
+function twitterCall() {
+	client.get('search/tweets', { q: 'liri', count: 10 }, function (error, tweets, response) {
+		if (!error) {
+			console.log("\n-------------------")
+			console.log("\n Now searching Twitter user @NewLiri !")
+			for (var i = 0; i < 10; i++) {
+				console.log("\n-------------------")
+				console.log("\nTweet #" + (i + 1))
+				console.log("\n" + tweets.statuses[i].text)
+				console.log("\nTime Tweet Created:" + tweets.statuses[i].created_at)
+			}
+			return console.log("Twitter Feed complete!")
+		}
+		console.log("There was an error, please try again!")
+	})
 };
+// spotify api call function with a passed object.  Limiting to 1 for speed's sake
+function spotifyCall(object) {
+	spotify.search({ type: 'track', query: object, limit: 1 }, function (err, data) {
+		if (err) {
+			return console.log("There was an error of " + err)
+		}
+		// easy storage of our song
+		var song = data.tracks.items[0];
 
-//Function for finding songs on Spotify
-var getMeSpotify = function(songName) {
-	var newName = new Spotify(dataKeys.spotify);
-  //If it doesn't find a song, find Blink 182's What's my age again
-  if (songName === undefined) {
-    songName = 'What\'s my age again';
-  };
-
-  newName.search({ type: 'track', query: songName }, function(err, data) {
-    if (err) {
-      console.log('Error occurred: ' + err);
-      return;
-    }
-		console.log(data);
-		var songs = data.tracks.items;
-
-		var data = []; //empty array to hold data
-
-    for (var i = 0; i < songs.length; i++) {
-      data.push({
-        'artist(s)': songs[i].artists.map(getArtistNames),
-        'song name: ': songs[i].name,
-        'preview song: ': songs[i].preview_url,
-        'album: ': songs[i].album.name,
-      });
-    }
-    console.log(data);
-    writeToLog(data);
-  });
-};
-
-
-var getTweets = function() {
-
-
-  var params = { screen_name: 'NewLiri', count: 10 };
-
-  client.get('statuses/user_timeline', params, function(error, tweets, response) {
-
-    if (!error) {
-			var data = []; //empty array to hold data
-			console.log("you got this far");
-      for (var i = 0; i < tweets.length; i++) {
-				console.log('almost there');
-				console.log(tweets);
-        tweets.push({
-            'created at: ' : tweets[i].created_at,
-            'Tweets: ' : tweets[i].text,
-        });
-      }
-      console.log(tweets);
-      writeToLog(tweets);
-    }
-  });
-};
-
-var getMeMovie = function(movieName) {
-
-  if (movieName === undefined) {
-    movieName = 'Mr Nobody';
-  }
-
-  var urlHit = "http://www.omdbapi.com/?t=" + movieName + "&y=&plot=full&tomatoes=true&r=json";
-
-  request(urlHit, function(error, response, body) {
-    if (!error && response.statusCode == 200) {
-      var data = [];
-      var jsonData = JSON.parse(body);
-
-      data.push({
-      'Title: ' : jsonData.Title,
-      'Year: ' : jsonData.Year,
-      'Rated: ' : jsonData.Rated,
-      'IMDB Rating: ' : jsonData.imdbRating,
-      'Country: ' : jsonData.Country,
-      'Language: ' : jsonData.Language,
-      'Plot: ' : jsonData.Plot,
-      'Actors: ' : jsonData.Actors,
-      'Rotten Tomatoes Rating: ' : jsonData.tomatoRating,
-      'Rotton Tomatoes URL: ' : jsonData.tomatoURL,
-  });
-      console.log(data);
-      writeToLog(data);
-}
-  });
-
-}
-//It doesn't do what you say becuase I'm failing at life
-var doWhatItSays = function() {
-  fs.readFile("random.txt", "utf8", function(error, data) {
-    console.log(data);
-    writeToLog(data);
-    var dataArr = data.split(',')
-
-    if (dataArr.length == 2) {
-      pick(dataArr[0], dataArr[1]);
-    } else if (dataArr.length == 1) {
-      pick(dataArr[0]);
-    }
-
-  });
-}
-// This is where I am calling all of my functions that don't work Why is my life so hard?????
-var pick = function(caseData, functionData) {
-  switch (caseData) {
-    case 'my-tweets':
-      getTweets();
-      break;
-    case 'spotify-this-song':
-      getMeSpotify(functionData);
-      break;
-    case 'movie-this':
-      getMeMovie(functionData);
-      break;
-    case 'do-what-it-says':
-      doWhatItSays();
-      break;
-    default:
-      console.log('LIRI doesn\'t know that');
-  }
+		var printsong = {
+			'Artist(s)': song.artists[0].name,
+			'Name': song.name,
+			'Preview Link': song.preview_url,
+			'Album': song.album.name
+		}
+		console.log(JSON.stringify(printsong, null, 2));
+	})
 }
 
-//run this on load of js file
-var runThis = function(argOne, argTwo) {
-  pick(argOne, argTwo);
-};
-
-runThis(process.argv[2], process.argv[3]);
+function doWhat() {
+	// use FS to read the info in random.txt
+	fs.readFile("random.txt", "utf8", function (error, data) {
+		if (error) {
+			return console.log("There was an error with the do-what-it-says input")
+		}
+		// split on the , and store as an array
+		var inputArr = data.split(',');
+		// switch tree based on first item in random.text
+		switch (inputArr[0]) {
+			case "spotify-this-song":
+				spotifyCall(inputArr[1]);
+				break;
+			case "my-tweets":
+				twitterCall();
+				break;
+			case "movie-this":
+				omdbCall(inputArr[1]);
+				break;
+			default:
+				console.log("There was nothing readable in the file");
+		}
+	})
+}
+// switch case that determines what we do based off argv2 in the master function
+switch (uProcess) {
+	case "my-tweets":
+		return twitterCall();
+		break;
+	case "spotify-this-song":
+		// if there was any input after the spotify-this-song command we will search it
+		if (arg3) {
+			console.log("\n You made a search in the Spotify API");
+			return spotifyCall(input);
+		}
+		// otherwise we do the default Ace of Bass
+		console.log("\n You didn't specify anything so here is 'I Saw the Sign' by Ace of Bass");
+		return spotifyCall("The Sign Ace of Base")
+		break;
+	case "movie-this":
+		// if there was any input after the movie-this we will search for it
+		if (arg3) {
+			return omdbCall(input)
+		}
+		// otherwise we will look for Mr Nobody 
+		console.log(nobodyText)
+		omdbCall("Mr Nobody");
+		break;
+	case "do-what-it-says":
+		doWhat();
+		break;
+	default: "That is not an option.  The currently support lists are 'my-tweets', 'movie-this' and 'spotify-this-song'."
+}
 
